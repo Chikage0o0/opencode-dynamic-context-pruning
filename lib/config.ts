@@ -101,7 +101,6 @@ export const VALID_CONFIG_KEYS = new Set([
     "enabled",
     "autoUpdate",
     "debug",
-    "showUpdateToasts",
     "pruneNotification",
     "pruneNotificationType",
     "turnProtection",
