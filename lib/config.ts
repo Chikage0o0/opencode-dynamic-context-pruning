@@ -658,7 +658,7 @@ function scheduleConfigWarning(
         if (!notify) return
         try {
             notify(title, message)
-        } catch { }
+        } catch {}
     }, 7000)
 }
 
@@ -784,8 +784,8 @@ function getConfigPaths(directory?: string): {
     const global = existsSync(GLOBAL_CONFIG_PATH_JSONC)
         ? GLOBAL_CONFIG_PATH_JSONC
         : existsSync(GLOBAL_CONFIG_PATH_JSON)
-            ? GLOBAL_CONFIG_PATH_JSON
-            : null
+          ? GLOBAL_CONFIG_PATH_JSON
+          : null
 
     let configDir: string | null = null
     const opencodeConfigDir = process.env.OPENCODE_CONFIG_DIR
@@ -795,8 +795,8 @@ function getConfigPaths(directory?: string): {
         configDir = existsSync(configJsonc)
             ? configJsonc
             : existsSync(configJson)
-                ? configJson
-                : null
+              ? configJson
+              : null
     }
 
     let project: string | null = null
@@ -808,8 +808,8 @@ function getConfigPaths(directory?: string): {
             project = existsSync(projectJsonc)
                 ? projectJsonc
                 : existsSync(projectJson)
-                    ? projectJson
-                    : null
+                  ? projectJson
+                  : null
         }
     }
 
