@@ -53,6 +53,9 @@ Each level overrides the previous, so project settings take priority over global
 > [!NOTE]
 > If you use models with smaller context windows, such as GitHub Copilot models or local models, lower `compress.minContextLimit` and `compress.maxContextLimit` in your configuration to match the available context.
 
+> [!TIP]
+> Set `pruningModel` to an opencode model string such as `openai/gpt-4o-mini` if you want the main model to select compression ranges while a cheaper model generates the replacement summaries.
+
 > [!IMPORTANT]
 > Defaults are applied automatically. Expand this if you want to review or override settings.
 
@@ -69,6 +72,10 @@ Each level overrides the previous, so project settings take priority over global
     "autoUpdate": true,
     // Enable debug logging to ~/.config/opencode/logs/dcp/
     "debug": false,
+    // Optional model used to generate compression summaries.
+    // Format: "providerID/modelID" (for example "openai/gpt-4o-mini").
+    // When set, the main model selects what to compress and this model writes summaries.
+    // "pruningModel": "openai/gpt-4o-mini",
     // Notification display: "off", "minimal", or "detailed"
     "pruneNotification": "detailed",
     // Notification type: "chat" (in-conversation) or "toast" (system toast)

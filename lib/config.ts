@@ -1,8 +1,9 @@
 import { readFileSync, writeFileSync, existsSync, mkdirSync, statSync } from "fs"
 import { join, dirname } from "path"
 import { homedir } from "os"
-import { parse } from "jsonc-parser/lib/esm/main.js"
+import { parse } from "jsonc-parser"
 import type { PluginInput } from "@opencode-ai/plugin"
+import { isPruningModelString, PRUNING_MODEL_FORMAT } from "./pruning-model"
 
 type Permission = "ask" | "allow" | "deny"
 type CompressMode = "range" | "message"
@@ -59,6 +60,7 @@ export interface PluginConfig {
     enabled: boolean
     autoUpdate: boolean
     debug: boolean
+    pruningModel?: string
     pruneNotification: "off" | "minimal" | "detailed"
     pruneNotificationType: "chat" | "toast"
     commands: Commands
@@ -95,6 +97,7 @@ export const VALID_CONFIG_KEYS = new Set([
     "enabled",
     "autoUpdate",
     "debug",
+    "pruningModel",
     "showUpdateToasts",
     "pruneNotification",
     "pruneNotificationType",
@@ -178,6 +181,16 @@ export function validateConfigTypes(config: Record<string, any>): ValidationErro
 
     if (config.debug !== undefined && typeof config.debug !== "boolean") {
         errors.push({ key: "debug", expected: "boolean", actual: typeof config.debug })
+    }
+
+    if (config.pruningModel !== undefined) {
+        if (!isPruningModelString(config.pruningModel)) {
+            errors.push({
+                key: "pruningModel",
+                expected: PRUNING_MODEL_FORMAT,
+                actual: JSON.stringify(config.pruningModel),
+            })
+        }
     }
 
     if (config.pruneNotification !== undefined) {
@@ -657,6 +670,7 @@ const defaultConfig: PluginConfig = {
     enabled: true,
     autoUpdate: true,
     debug: false,
+    pruningModel: undefined,
     pruneNotification: "detailed",
     pruneNotificationType: "chat",
     commands: {
@@ -934,6 +948,7 @@ function mergeLayer(config: PluginConfig, data: Record<string, any>): PluginConf
         enabled: data.enabled ?? config.enabled,
         autoUpdate: data.autoUpdate ?? config.autoUpdate,
         debug: data.debug ?? config.debug,
+        pruningModel: data.pruningModel ?? config.pruningModel,
         pruneNotification: data.pruneNotification ?? config.pruneNotification,
         pruneNotificationType: data.pruneNotificationType ?? config.pruneNotificationType,
         commands: mergeCommands(config.commands, data.commands as any),

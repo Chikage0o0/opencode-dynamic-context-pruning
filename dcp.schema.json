@@ -25,6 +25,11 @@
             "default": false,
             "description": "Enable debug logging"
         },
+        "pruningModel": {
+            "type": "string",
+            "pattern": "^[^/\\s]+/\\S+$",
+            "description": "Optional opencode model string (providerID/modelID) used to generate compression summaries. When set, the main model selects ranges/messages and this model writes the replacement summaries."
+        },
         "pruneNotification": {
             "type": "string",
             "enum": ["off", "minimal", "detailed"],

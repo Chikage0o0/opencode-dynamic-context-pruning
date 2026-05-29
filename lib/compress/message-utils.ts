@@ -27,7 +27,13 @@ class SoftIssue extends Error {
     }
 }
 
-export function validateArgs(args: CompressMessageToolArgs): void {
+export function validateArgs(
+    args: CompressMessageToolArgs,
+    options: { requireSummary?: boolean; requireTopic?: boolean } = {},
+): void {
+    const requireSummary = options.requireSummary ?? true
+    const requireTopic = options.requireTopic ?? true
+
     if (typeof args.topic !== "string" || args.topic.trim().length === 0) {
         throw new Error("topic is required and must be a non-empty string")
     }
@@ -44,11 +50,14 @@ export function validateArgs(args: CompressMessageToolArgs): void {
             throw new Error(`${prefix}.messageId is required and must be a non-empty string`)
         }
 
-        if (typeof entry?.topic !== "string" || entry.topic.trim().length === 0) {
+        if (requireTopic && (typeof entry?.topic !== "string" || entry.topic.trim().length === 0)) {
             throw new Error(`${prefix}.topic is required and must be a non-empty string`)
         }
 
-        if (typeof entry?.summary !== "string" || entry.summary.trim().length === 0) {
+        if (
+            requireSummary &&
+            (typeof entry?.summary !== "string" || entry.summary.trim().length === 0)
+        ) {
             throw new Error(`${prefix}.summary is required and must be a non-empty string`)
         }
     }
@@ -166,6 +175,7 @@ export function resolveMessages(
                 {
                     ...entry,
                     messageId: normalizedMessageId,
+                    topic: entry.topic?.trim() || args.topic.trim(),
                 },
                 searchContext,
                 state,

@@ -1,7 +1,10 @@
 import { tool } from "@opencode-ai/plugin"
 import type { ToolContext } from "./types"
 import { countTokens } from "../token-utils"
-import { RANGE_FORMAT_EXTENSION } from "../prompts/extensions/tool"
+import {
+    RANGE_FORMAT_EXTENSION,
+    RANGE_PRUNING_MODEL_FORMAT_EXTENSION,
+} from "../prompts/extensions/tool"
 import { finalizeSession, prepareSession, type NotificationEntry } from "./pipeline"
 import {
     appendProtectedPromptInfo,
@@ -25,30 +28,40 @@ import {
     wrapCompressedSummary,
 } from "./state"
 import type { CompressRangeToolArgs } from "./types"
+import {
+    buildPruningSummaryRequest,
+    createSessionPruningSummaryGenerator,
+    generatePruningSummary,
+} from "./pruning-summary"
 
-function buildSchema() {
+function buildSchema(usePruningModel: boolean) {
+    const boundarySchema = {
+        startId: tool.schema
+            .string()
+            .describe("Message or block ID marking the beginning of range (e.g. m0001, b2)"),
+        endId: tool.schema
+            .string()
+            .describe("Message or block ID marking the end of range (e.g. m0012, b5)"),
+    }
+    const entrySchema = usePruningModel
+        ? tool.schema.object(boundarySchema)
+        : tool.schema.object({
+              ...boundarySchema,
+              summary: tool.schema
+                  .string()
+                  .describe("Complete technical summary replacing all content in range"),
+          })
+
     return {
         topic: tool.schema
             .string()
             .describe("Short label (3-5 words) for display - e.g., 'Auth System Exploration'"),
         content: tool.schema
-            .array(
-                tool.schema.object({
-                    startId: tool.schema
-                        .string()
-                        .describe(
-                            "Message or block ID marking the beginning of range (e.g. m0001, b2)",
-                        ),
-                    endId: tool.schema
-                        .string()
-                        .describe("Message or block ID marking the end of range (e.g. m0012, b5)"),
-                    summary: tool.schema
-                        .string()
-                        .describe("Complete technical summary replacing all content in range"),
-                }),
-            )
+            .array(entrySchema)
             .describe(
-                "One or more ranges to compress, each with start/end boundaries and a summary",
+                usePruningModel
+                    ? "One or more ranges to compress. The configured pruning model generates summaries."
+                    : "One or more ranges to compress, each with start/end boundaries and a summary",
             ),
     }
 }
@@ -56,13 +69,17 @@ function buildSchema() {
 export function createCompressRangeTool(ctx: ToolContext): ReturnType<typeof tool> {
     ctx.prompts.reload()
     const runtimePrompts = ctx.prompts.getRuntimePrompts()
+    const pruningModel = ctx.config.pruningModel
+    const usePruningModel = typeof pruningModel === "string" && pruningModel.length > 0
 
     return tool({
-        description: runtimePrompts.compressRange + RANGE_FORMAT_EXTENSION,
-        args: buildSchema(),
+        description: usePruningModel
+            ? RANGE_PRUNING_MODEL_FORMAT_EXTENSION
+            : runtimePrompts.compressRange + RANGE_FORMAT_EXTENSION,
+        args: buildSchema(usePruningModel),
         async execute(args, toolCtx) {
             const input = args as CompressRangeToolArgs
-            validateArgs(input)
+            validateArgs(input, { requireSummary: !usePruningModel })
             const callId =
                 typeof (toolCtx as unknown as { callID?: unknown }).callID === "string"
                     ? (toolCtx as unknown as { callID: string }).callID
@@ -77,6 +94,9 @@ export function createCompressRangeTool(ctx: ToolContext): ReturnType<typeof too
             validateNonOverlapping(resolvedPlans)
 
             const notifications: NotificationEntry[] = []
+            const pruningSummaryGenerator = usePruningModel
+                ? (ctx.pruningSummaryGenerator ?? createSessionPruningSummaryGenerator(ctx.client))
+                : undefined
             const preparedPlans: Array<{
                 entry: (typeof resolvedPlans)[number]["entry"]
                 selection: (typeof resolvedPlans)[number]["selection"]
@@ -87,22 +107,49 @@ export function createCompressRangeTool(ctx: ToolContext): ReturnType<typeof too
             let totalCompressedMessages = 0
 
             for (const plan of resolvedPlans) {
-                const parsedPlaceholders = parseBlockPlaceholders(plan.entry.summary)
-                const missingBlockIds = validateSummaryPlaceholders(
-                    parsedPlaceholders,
-                    plan.selection.requiredBlockIds,
-                    plan.selection.startReference,
-                    plan.selection.endReference,
-                    searchContext.summaryByBlockId,
-                )
+                const planSummary = usePruningModel
+                    ? await generatePruningSummary(
+                          pruningSummaryGenerator!,
+                          buildPruningSummaryRequest({
+                              model: pruningModel!,
+                              mode: "range",
+                              sessionID: toolCtx.sessionID,
+                              batchTopic: input.topic,
+                              topic: input.topic,
+                              selection: plan.selection,
+                              searchContext,
+                              state: ctx.state,
+                          }),
+                      )
+                    : plan.entry.summary!
+                const parsedPlaceholders = usePruningModel
+                    ? []
+                    : parseBlockPlaceholders(planSummary)
+                const missingBlockIds = usePruningModel
+                    ? []
+                    : validateSummaryPlaceholders(
+                          parsedPlaceholders,
+                          plan.selection.requiredBlockIds,
+                          plan.selection.startReference,
+                          plan.selection.endReference,
+                          searchContext.summaryByBlockId,
+                      )
 
-                const injected = injectBlockPlaceholders(
-                    plan.entry.summary,
-                    parsedPlaceholders,
-                    searchContext.summaryByBlockId,
-                    plan.selection.startReference,
-                    plan.selection.endReference,
-                )
+                const injected = usePruningModel
+                    ? {
+                          expandedSummary: planSummary,
+                          consumedBlockIds: [...plan.selection.requiredBlockIds],
+                      }
+                    : injectBlockPlaceholders(
+                          planSummary,
+                          parsedPlaceholders,
+                          searchContext.summaryByBlockId,
+                          plan.selection.startReference,
+                          plan.selection.endReference,
+                      )
+                const protectedAppendOptions = usePruningModel
+                    ? { ignoredActiveBlockIds: injected.consumedBlockIds }
+                    : undefined
 
                 const summaryWithUsers = appendProtectedUserMessages(
                     injected.expandedSummary,
@@ -110,6 +157,7 @@ export function createCompressRangeTool(ctx: ToolContext): ReturnType<typeof too
                     searchContext,
                     ctx.state,
                     ctx.config.compress.protectUserMessages,
+                    protectedAppendOptions,
                 )
 
                 const summaryWithPromptInfo = appendProtectedPromptInfo(
@@ -118,6 +166,7 @@ export function createCompressRangeTool(ctx: ToolContext): ReturnType<typeof too
                     searchContext,
                     ctx.state,
                     ctx.config.compress.protectTags,
+                    protectedAppendOptions,
                 )
 
                 const summaryWithTools = await appendProtectedTools(
@@ -129,14 +178,20 @@ export function createCompressRangeTool(ctx: ToolContext): ReturnType<typeof too
                     searchContext,
                     ctx.config.compress.protectedTools,
                     ctx.config.protectedFilePatterns,
+                    protectedAppendOptions,
                 )
 
-                const completedSummary = appendMissingBlockSummaries(
-                    summaryWithTools,
-                    missingBlockIds,
-                    searchContext.summaryByBlockId,
-                    injected.consumedBlockIds,
-                )
+                const completedSummary = usePruningModel
+                    ? {
+                          expandedSummary: summaryWithTools,
+                          consumedBlockIds: injected.consumedBlockIds,
+                      }
+                    : appendMissingBlockSummaries(
+                          summaryWithTools,
+                          missingBlockIds,
+                          searchContext.summaryByBlockId,
+                          injected.consumedBlockIds,
+                      )
 
                 preparedPlans.push({
                     entry: plan.entry,

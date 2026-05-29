@@ -13,20 +13,50 @@ import {
 import { fetchSessionMessages } from "./search"
 import type { SearchContext, SelectionResolution } from "./types"
 
+interface ProtectedAppendOptions {
+    ignoredActiveBlockIds?: Iterable<number>
+}
+
+function buildIgnoredActiveBlockIds(
+    options: ProtectedAppendOptions | undefined,
+): ReadonlySet<number> | undefined {
+    return options?.ignoredActiveBlockIds ? new Set(options.ignoredActiveBlockIds) : undefined
+}
+
+function hasActiveCompressionOutsideIgnoredBlocks(
+    state: SessionState,
+    messageId: string,
+    ignoredActiveBlockIds: ReadonlySet<number> | undefined,
+): boolean {
+    const existingCompressionEntry = state.prune.messages.byMessageId.get(messageId)
+    if (!existingCompressionEntry || existingCompressionEntry.activeBlockIds.length === 0) {
+        return false
+    }
+
+    if (!ignoredActiveBlockIds) {
+        return true
+    }
+
+    return existingCompressionEntry.activeBlockIds.some(
+        (blockId) => !ignoredActiveBlockIds.has(blockId),
+    )
+}
+
 export function appendProtectedUserMessages(
     summary: string,
     selection: SelectionResolution,
     searchContext: SearchContext,
     state: SessionState,
     enabled: boolean,
+    options?: ProtectedAppendOptions,
 ): string {
     if (!enabled) return summary
 
+    const ignoredActiveBlockIds = buildIgnoredActiveBlockIds(options)
     const userTexts: string[] = []
 
     for (const messageId of selection.messageIds) {
-        const existingCompressionEntry = state.prune.messages.byMessageId.get(messageId)
-        if (existingCompressionEntry && existingCompressionEntry.activeBlockIds.length > 0) {
+        if (hasActiveCompressionOutsideIgnoredBlocks(state, messageId, ignoredActiveBlockIds)) {
             continue
         }
 
@@ -59,14 +89,15 @@ export function appendProtectedPromptInfo(
     searchContext: SearchContext,
     state: SessionState,
     enabled: boolean,
+    options?: ProtectedAppendOptions,
 ): string {
     if (!enabled) return summary
 
+    const ignoredActiveBlockIds = buildIgnoredActiveBlockIds(options)
     const protectedTexts: string[] = []
 
     for (const messageId of selection.messageIds) {
-        const existingCompressionEntry = state.prune.messages.byMessageId.get(messageId)
-        if (existingCompressionEntry && existingCompressionEntry.activeBlockIds.length > 0) {
+        if (hasActiveCompressionOutsideIgnoredBlocks(state, messageId, ignoredActiveBlockIds)) {
             continue
         }
 
@@ -116,12 +147,13 @@ export async function appendProtectedTools(
     searchContext: SearchContext,
     protectedTools: string[],
     protectedFilePatterns: string[] = [],
+    options?: ProtectedAppendOptions,
 ): Promise<string> {
+    const ignoredActiveBlockIds = buildIgnoredActiveBlockIds(options)
     const protectedOutputs: string[] = []
 
     for (const messageId of selection.messageIds) {
-        const existingCompressionEntry = state.prune.messages.byMessageId.get(messageId)
-        if (existingCompressionEntry && existingCompressionEntry.activeBlockIds.length > 0) {
+        if (hasActiveCompressionOutsideIgnoredBlocks(state, messageId, ignoredActiveBlockIds)) {
             continue
         }
 

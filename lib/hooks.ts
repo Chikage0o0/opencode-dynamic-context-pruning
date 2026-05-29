@@ -38,6 +38,7 @@ import { type HostPermissionSnapshot } from "./host-permissions"
 import { compressPermission, syncCompressPermissionState } from "./compress-permission"
 import { checkSession, ensureSessionInitialized, saveSessionState, syncToolCache } from "./state"
 import { cacheSystemPromptTokens } from "./ui/utils"
+import { isPruningGenerationSession } from "./pruning-guard"
 
 const INTERNAL_AGENT_SIGNATURES = [
     "You are a title generator",
@@ -45,6 +46,38 @@ const INTERNAL_AGENT_SIGNATURES = [
     "You are an anchored context summarization assistant for coding sessions",
     "Summarize what was done in this conversation",
 ]
+
+function outputMessageSessionID(output: { messages?: WithParts[] }): string | undefined {
+    if (!Array.isArray(output.messages)) {
+        return undefined
+    }
+
+    let onlySessionID: string | undefined
+    for (const message of output.messages) {
+        const sessionID = message?.info?.sessionID
+        if (typeof sessionID !== "string" || sessionID.length === 0) {
+            continue
+        }
+
+        if (onlySessionID === undefined) {
+            onlySessionID = sessionID
+        } else if (onlySessionID !== sessionID) {
+            return undefined
+        }
+    }
+
+    return onlySessionID
+}
+
+function eventSessionID(event: any): string | undefined {
+    const candidates = [
+        event?.sessionID,
+        event?.properties?.sessionID,
+        event?.properties?.part?.sessionID,
+        event?.properties?.message?.sessionID,
+    ]
+    return candidates.find((candidate) => typeof candidate === "string" && candidate.length > 0)
+}
 
 export function createSystemPromptHandler(
     state: SessionState,
@@ -56,6 +89,10 @@ export function createSystemPromptHandler(
         input: { sessionID?: string; model: { limit: { context: number } } },
         output: { system: string[] },
     ) => {
+        if (isPruningGenerationSession(input.sessionID)) {
+            return
+        }
+
         if (input.model?.limit?.context) {
             state.modelContextLimit = input.model.limit.context
             logger.debug("Cached model context limit", { limit: state.modelContextLimit })
@@ -104,7 +141,14 @@ export function createChatMessageTransformHandler(
     prompts: PromptStore,
     hostPermissions: HostPermissionSnapshot,
 ) {
-    return async (input: {}, output: { messages: WithParts[] }) => {
+    return async (input: { sessionID?: string }, output: { messages: WithParts[] }) => {
+        if (
+            isPruningGenerationSession(input.sessionID) ||
+            isPruningGenerationSession(outputMessageSessionID(output))
+        ) {
+            return
+        }
+
         const receivedMessages = Array.isArray(output.messages) ? output.messages.length : 0
         const messages = filterMessagesInPlace(output.messages)
         if (messages.length !== receivedMessages) {
@@ -168,6 +212,10 @@ export function createCommandExecuteHandler(
         input: { command: string; sessionID: string; arguments: string },
         output: { parts: any[] },
     ) => {
+        if (isPruningGenerationSession(input.sessionID)) {
+            return
+        }
+
         if (!config.commands.enabled) {
             return
         }
@@ -279,12 +327,20 @@ export function createTextCompleteHandler() {
         _input: { sessionID: string; messageID: string; partID: string },
         output: { text: string },
     ) => {
+        if (isPruningGenerationSession(_input.sessionID)) {
+            return
+        }
+
         output.text = stripHallucinationsFromString(output.text)
     }
 }
 
 export function createEventHandler(state: SessionState, logger: Logger) {
     return async (input: { event: any }) => {
+        if (isPruningGenerationSession(eventSessionID(input.event))) {
+            return
+        }
+
         const eventTime =
             typeof input.event?.time === "number" && Number.isFinite(input.event.time)
                 ? input.event.time

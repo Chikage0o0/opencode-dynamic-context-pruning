@@ -9,6 +9,7 @@ import {
     createTextCompleteHandler,
 } from "../lib/hooks"
 import { Logger } from "../lib/logger"
+import { withPruningGenerationSession } from "../lib/pruning-guard"
 import {
     createSessionState,
     ensureSessionInitialized,
@@ -112,6 +113,64 @@ test("system prompt handler caches full model context for percentage thresholds"
     assert.equal(state.modelContextLimit, 200000)
 })
 
+test("system prompt handler is disabled during internal pruning generation", async () => {
+    const state = createSessionState()
+    const handler = createSystemPromptHandler(state, new Logger(false), buildConfig("allow"), {
+        reload() {
+            throw new Error("prompt store should not reload during pruning generation")
+        },
+        getRuntimePrompts() {
+            return {} as any
+        },
+    } as any)
+    const output = { system: ["base system"] }
+
+    await withPruningGenerationSession("session-1", async () => {
+        await handler(
+            {
+                sessionID: "session-1",
+                model: {
+                    limit: {
+                        context: 200000,
+                    },
+                },
+            } as any,
+            output,
+        )
+    })
+
+    assert.equal(state.modelContextLimit, undefined)
+    assert.deepEqual(output.system, ["base system"])
+})
+
+test("system prompt handler still runs for non-pruning sessions during worker generation", async () => {
+    const state = createSessionState()
+    const handler = createSystemPromptHandler(state, new Logger(false), buildConfig("deny"), {
+        reload() {
+            throw new Error("permission deny should avoid prompt reload")
+        },
+        getRuntimePrompts() {
+            return {} as any
+        },
+    } as any)
+
+    await withPruningGenerationSession("worker-session", async () => {
+        await handler(
+            {
+                sessionID: "session-1",
+                model: {
+                    limit: {
+                        context: 200000,
+                    },
+                },
+            } as any,
+            { system: ["base system"] },
+        )
+    })
+
+    assert.equal(state.modelContextLimit, 200000)
+})
+
 test("chat message transform strips hallucinated tags even when compress is denied", async () => {
     const state = createSessionState()
     const logger = new Logger(false)
@@ -137,6 +196,94 @@ test("chat message transform strips hallucinated tags even when compress is deni
 
     assert.equal(output.messages[0]?.parts[0]?.type, "text")
     assert.equal((output.messages[0]?.parts[0] as any).text, "alpha  omega")
+})
+
+test("chat message transform is disabled during internal pruning generation", async () => {
+    const state = createSessionState()
+    const logger = new Logger(false)
+    let sessionGetCalls = 0
+    const handler = createChatMessageTransformHandler(
+        {
+            session: {
+                get: async () => {
+                    sessionGetCalls += 1
+                    return {}
+                },
+            },
+        } as any,
+        state,
+        logger,
+        buildConfig("allow"),
+        {
+            reload() {
+                throw new Error("prompt store should not reload during pruning generation")
+            },
+            getRuntimePrompts() {
+                return {} as any
+            },
+        } as any,
+        { global: undefined, agents: {} },
+    )
+    const output = {
+        messages: [buildMessage("assistant-1", "assistant", "alpha  omega")],
+    }
+
+    await withPruningGenerationSession("session-1", async () => {
+        await handler({}, output)
+    })
+
+    assert.equal(sessionGetCalls, 0)
+    assert.equal(state.sessionId, null)
+    assert.equal((output.messages[0]?.parts[0] as any).text, "alpha  omega")
+})
+
+test("chat message transform still runs for non-pruning sessions during worker generation", async () => {
+    const state = createSessionState()
+    const logger = new Logger(false)
+    let sessionGetCalls = 0
+    const handler = createChatMessageTransformHandler(
+        {
+            session: {
+                get: async () => {
+                    sessionGetCalls += 1
+                    return { data: { parentID: null } }
+                },
+            },
+        } as any,
+        state,
+        logger,
+        buildConfig("deny"),
+        {
+            reload() {},
+            getRuntimePrompts() {
+                return {
+                    system: "",
+                    compressRange: "",
+                    compressMessage: "",
+                    contextLimitNudge: "",
+                    turnNudge: "",
+                    iterationNudge: "",
+                    manualExtension: "",
+                    subagentExtension: "",
+                } as any
+            },
+        } as any,
+        { global: undefined, agents: {} },
+    )
+    const output = {
+        messages: [buildMessage("user-1", "user", "alpha  omega")],
+    }
+    ;(output.messages[0]!.info as any).model = {
+        providerID: "anthropic",
+        modelID: "claude-test",
+    }
+
+    await withPruningGenerationSession("worker-session", async () => {
+        await handler({}, output)
+    })
+
+    assert.equal(sessionGetCalls, 1)
+    assert.equal(state.sessionId, "session-1")
 })
 
 test("chat message transform drops messages without info instead of crashing", async () => {

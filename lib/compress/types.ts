@@ -2,6 +2,7 @@ import type { PluginConfig } from "../config"
 import type { Logger } from "../logger"
 import type { PromptStore } from "../prompts/store"
 import type { CompressionBlock, CompressionMode, SessionState, WithParts } from "../state"
+import type { PruningSummaryGenerator } from "./pruning-summary"
 
 export interface ToolContext {
     client: any
@@ -9,12 +10,13 @@ export interface ToolContext {
     logger: Logger
     config: PluginConfig
     prompts: PromptStore
+    pruningSummaryGenerator?: PruningSummaryGenerator
 }
 
 export interface CompressRangeEntry {
     startId: string
     endId: string
-    summary: string
+    summary?: string
 }
 
 export interface CompressRangeToolArgs {
@@ -24,8 +26,8 @@ export interface CompressRangeToolArgs {
 
 export interface CompressMessageEntry {
     messageId: string
-    topic: string
-    summary: string
+    topic?: string
+    summary?: string
 }
 
 export interface CompressMessageToolArgs {
