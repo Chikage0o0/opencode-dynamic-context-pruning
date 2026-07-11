@@ -42,7 +42,6 @@ function buildConfig(mode: "message" | "range" = "message"): PluginConfig {
             minContextLimit: 50000,
             nudgeFrequency: 5,
             iterationNudgeThreshold: 15,
-            nudgeForce: "soft",
             protectedTools: ["task"],
             protectTags: false,
             protectUserMessages: false,
@@ -912,5 +911,84 @@ test("injectMessageIds skips assistant with empty text part (issue #463)", () =>
         (emptyTextAssistant.parts[0] as any).text,
         "",
         "empty text part should remain untouched",
+    )
+})
+
+test("turn nudge anchors to assistant in soft mode (>min, <=max)", () => {
+    const sessionID = "ses_turn_nudge_soft_role"
+    const messages: WithParts[] = [
+        buildMessage("msg-user-1", "user", sessionID, repeatedWord("alpha", 10), 1),
+        buildMessage("msg-assistant-1", "assistant", sessionID, repeatedWord("beta", 10), 2),
+    ]
+    const state = createSessionState()
+    const config = buildConfig("range")
+
+    assignMessageRefs(state, messages)
+    // turnNudgeAnchors 同时包含 user 和 assistant 消息 ID，模拟 injectCompressNudges 的 soft 分支。
+    state.nudges.turnNudgeAnchors.add("msg-user-1")
+    state.nudges.turnNudgeAnchors.add("msg-assistant-1")
+
+    applyAnchoredNudges(state, config, messages, {
+        system: "",
+        compressRange: "",
+        compressMessage: "",
+        contextLimitNudge: "",
+        turnNudge: "<dcp-system-reminder>TURN NUDGE</dcp-system-reminder>",
+        iterationNudge: "",
+    })
+
+    // soft 模式锚定 assistant：assistant 消息收到 turn nudge，user 消息不收到。
+    assert.match(
+        (messages[1]!.parts[0] as any).text,
+        /TURN NUDGE/,
+        "soft mode should inject turn nudge into assistant message",
+    )
+    assert.doesNotMatch(
+        (messages[0]!.parts[0] as any).text,
+        /TURN NUDGE/,
+        "soft mode should not inject turn nudge into user message",
+    )
+})
+
+test("turn nudge anchors to user in hard mode (>max, old nudgeForce strong)", () => {
+    const sessionID = "ses_turn_nudge_hard_role"
+    const messages: WithParts[] = [
+        buildMessage("msg-user-1", "user", sessionID, repeatedWord("alpha", 10), 1),
+        buildMessage("msg-assistant-1", "assistant", sessionID, repeatedWord("beta", 10), 2),
+    ]
+    const state = createSessionState()
+    const config = buildConfig("range")
+
+    assignMessageRefs(state, messages)
+    // turnNudgeAnchors 同时包含 user 和 assistant 消息 ID，模拟 injectCompressNudges 的 hard 分支。
+    state.nudges.turnNudgeAnchors.add("msg-user-1")
+    state.nudges.turnNudgeAnchors.add("msg-assistant-1")
+
+    applyAnchoredNudges(
+        state,
+        config,
+        messages,
+        {
+            system: "",
+            compressRange: "",
+            compressMessage: "",
+            contextLimitNudge: "",
+            turnNudge: "<dcp-system-reminder>TURN NUDGE</dcp-system-reminder>",
+            iterationNudge: "",
+        },
+        undefined,
+        true, // hardMode = overMaxLimit
+    )
+
+    // hard 模式锚定 user（旧 strong 行为）：user 消息收到 turn nudge，assistant 消息不收到。
+    assert.match(
+        (messages[0]!.parts[0] as any).text,
+        /TURN NUDGE/,
+        "hard mode should inject turn nudge into user message",
+    )
+    assert.doesNotMatch(
+        (messages[1]!.parts[0] as any).text,
+        /TURN NUDGE/,
+        "hard mode should not inject turn nudge into assistant message",
     )
 })

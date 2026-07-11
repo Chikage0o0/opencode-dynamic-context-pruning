@@ -93,7 +93,11 @@ export const injectCompressNudges = (
                 anchorsChanged = true
             }
         }
-    } else if (overMinLimit) {
+    }
+
+    // turn/iteration 提醒在 soft(>min) 与 hard(>max) 下都维护。
+    // hard 时 turn nudge 锚定到 user（旧 strong 行为），soft 时锚定到 assistant。
+    if (overMinLimit || overMaxLimit) {
         const isLastMessageUser = lastMessage?.message.info.role === "user"
 
         if (isLastMessageUser && lastAssistantMessage) {
@@ -135,7 +139,7 @@ export const injectCompressNudges = (
         }
     }
 
-    applyAnchoredNudges(state, config, messages, prompts, compressionPriorities)
+    applyAnchoredNudges(state, config, messages, prompts, compressionPriorities, overMaxLimit)
 
     if (anchorsChanged) {
         void saveSessionState(state, logger)

@@ -154,7 +154,7 @@ export function isContextOverLimits(
     const currentTokens = getCurrentTokenUsage(state, messages)
 
     const overMaxLimit = maxContextLimit === undefined ? false : currentTokens > maxContextLimit
-    const overMinLimit = minContextLimit === undefined ? true : currentTokens >= minContextLimit
+    const overMinLimit = minContextLimit === undefined ? true : currentTokens > minContextLimit
 
     return {
         overMaxLimit,
@@ -270,11 +270,12 @@ function collectAnchoredMessages(
 
 function collectTurnNudgeAnchors(
     state: SessionState,
-    config: PluginConfig,
     messages: WithParts[],
+    hardMode: boolean,
 ): Set<string> {
     const turnNudgeAnchors = new Set<string>()
-    const targetRole = config.compress.nudgeForce === "strong" ? "user" : "assistant"
+    // soft(>min, <=max) 锚定 assistant；hard(>max) 锚定 user，等价旧 nudgeForce: "strong"。
+    const targetRole: "user" | "assistant" = hardMode ? "user" : "assistant"
 
     for (const message of messages) {
         if (!state.nudges.turnNudgeAnchors.has(message.info.id)) continue
@@ -327,8 +328,9 @@ export function applyAnchoredNudges(
     messages: WithParts[],
     prompts: RuntimePrompts,
     compressionPriorities?: CompressionPriorityMap,
+    hardMode = false,
 ): void {
-    const turnNudgeAnchors = collectTurnNudgeAnchors(state, config, messages)
+    const turnNudgeAnchors = collectTurnNudgeAnchors(state, messages, hardMode)
 
     if (config.compress.mode === "message") {
         applyMessageModeAnchoredNudge(

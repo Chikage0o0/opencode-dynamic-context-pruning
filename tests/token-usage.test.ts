@@ -39,7 +39,6 @@ function buildConfig(maxContextLimit: number, minContextLimit = 1): PluginConfig
             minContextLimit,
             nudgeFrequency: 5,
             iterationNudgeThreshold: 15,
-            nudgeForce: "soft",
             protectedTools: ["task"],
             protectTags: false,
             protectUserMessages: false,
@@ -297,4 +296,47 @@ test("isContextOverLimits does not extend the max threshold when summaryBuffer i
     const overLimit = isContextOverLimits(config, state, undefined, undefined, messages)
 
     assert.equal(overLimit.overMaxLimit, true)
+})
+
+test("isContextOverLimits soft reminder is threshold-driven: not fired at minContextLimit, fired above it", () => {
+    const messages = buildCompactedMessages()
+    messages.push(buildPostCompactionAssistantMessage())
+
+    const state = createSessionState()
+    state.lastCompaction = 2
+
+    const freshReportedTotal = 2400 + 600 + 150 + 300
+
+    // currentTokens === minContextLimit: strict > means no soft reminder.
+    const atMinLimit = isContextOverLimits(
+        buildConfig(freshReportedTotal * 10, freshReportedTotal),
+        state,
+        undefined,
+        undefined,
+        messages,
+    )
+    assert.equal(atMinLimit.overMinLimit, false)
+    assert.equal(atMinLimit.overMaxLimit, false)
+
+    // currentTokens > minContextLimit (and still <= maxContextLimit): soft reminder fires.
+    const aboveMinLimit = isContextOverLimits(
+        buildConfig(freshReportedTotal * 10, freshReportedTotal - 1),
+        state,
+        undefined,
+        undefined,
+        messages,
+    )
+    assert.equal(aboveMinLimit.overMinLimit, true)
+    assert.equal(aboveMinLimit.overMaxLimit, false)
+
+    // currentTokens > maxContextLimit: hard reminder fires (and soft still true).
+    const aboveMaxLimit = isContextOverLimits(
+        buildConfig(freshReportedTotal - 1, freshReportedTotal - 1),
+        state,
+        undefined,
+        undefined,
+        messages,
+    )
+    assert.equal(aboveMaxLimit.overMinLimit, true)
+    assert.equal(aboveMaxLimit.overMaxLimit, true)
 })

@@ -156,7 +156,7 @@
                     "description": "When enabled, active summary tokens extend the effective maxContextLimit used for context-limit nudges."
                 },
                 "maxContextLimit": {
-                    "description": "Soft upper threshold. Above this, DCP keeps sending strong compression nudges (based on nudgeFrequency), so the model is pushed to compress. Accepts number or \"X%\" of the model context window.",
+                    "description": "Hard reminder threshold (equivalent to old nudgeForce: \"strong\"). When currentTokens > maxContextLimit, DCP injects hard compression nudges (based on nudgeFrequency) and turn nudges anchor to user messages, pushing the model to compress. Reminder only fires when the threshold is strictly exceeded. Accepts number or \"X%\" of the model context window.",
                     "default": 100000,
                     "oneOf": [
                         {
@@ -169,7 +169,7 @@
                     ]
                 },
                 "minContextLimit": {
-                    "description": "Soft lower threshold for reminder nudges. Below this, turn/iteration reminders are off (compression is less likely). At or above this, reminders are on. Accepts number or \"X%\" of the model context window.",
+                    "description": "Soft reminder threshold (equivalent to old nudgeForce: \"soft\"). When currentTokens > minContextLimit (and not yet above maxContextLimit), DCP injects soft turn/iteration reminders anchored to assistant messages. At or below this threshold, no reminder fires. Reminder only fires when the threshold is strictly exceeded. Accepts number or \"X%\" of the model context window.",
                     "default": 50000,
                     "oneOf": [
                         {
@@ -223,12 +223,6 @@
                     "minimum": 1,
                     "description": "How many messages to wait after a user message before adding compression reminders."
                 },
-                "nudgeForce": {
-                    "type": "string",
-                    "enum": ["strong", "soft"],
-                    "default": "soft",
-                    "description": "Controls how likely compression is after user messages. 'strong' is more likely, 'soft' is less likely."
-                },
                 "protectedTools": {
                     "type": "array",
                     "items": {
@@ -257,7 +251,6 @@
                 "minContextLimit": 50000,
                 "nudgeFrequency": 5,
                 "iterationNudgeThreshold": 15,
-                "nudgeForce": "soft",
                 "protectedTools": [],
                 "protectTags": false,
                 "protectUserMessages": false

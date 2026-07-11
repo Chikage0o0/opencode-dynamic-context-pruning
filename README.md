@@ -125,13 +125,19 @@ Each level overrides the previous, so project settings take priority over global
         "showCompression": false,
         // Let active summary tokens extend the effective maxContextLimit
         "summaryBuffer": true,
-        // Soft upper threshold: above this, DCP keeps injecting strong
-        // compression nudges (based on nudgeFrequency), so compression is
-        // much more likely. Accepts: number or "X%" of model context window.
+        // Hard reminder threshold (equivalent to old nudgeForce: "strong"):
+        // when currentTokens > maxContextLimit, DCP injects hard compression
+        // nudges (based on nudgeFrequency) and turn nudges anchor to user
+        // messages, pushing the model to compress. Reminder only fires when
+        // the threshold is strictly exceeded.
+        // Accepts: number or "X%" of model context window.
         "maxContextLimit": 100000,
-        // Soft lower threshold for reminder nudges: below this, turn/iteration
-        // reminders are off (compression less likely). At/above this, reminders
-        // are on. Accepts: number or "X%" of model context window.
+        // Soft reminder threshold (equivalent to old nudgeForce: "soft"):
+        // when currentTokens > minContextLimit (and not yet above
+        // maxContextLimit), DCP injects soft turn/iteration reminders anchored
+        // to assistant messages. At or below this, no reminder fires. Reminder
+        // only fires when the threshold is strictly exceeded.
+        // Accepts: number or "X%" of model context window.
         "minContextLimit": 50000,
         // Optional per-model override for maxContextLimit by providerID/modelID.
         // If present, this wins over the global maxContextLimit.
@@ -152,9 +158,6 @@ Each level overrides the previous, so project settings take priority over global
         // Start adding compression reminders after this many
         // messages have happened since the last user message
         "iterationNudgeThreshold": 15,
-        // Controls how likely compression is after user messages
-        // ("strong" = more likely, "soft" = less likely)
-        "nudgeForce": "soft",
         // Tool names whose completed outputs are appended to the compression
         "protectedTools": [],
         // Preserve text wrapped in <protect>...</protect> when compressed
