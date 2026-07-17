@@ -1,7 +1,9 @@
 # Dynamic Context Pruning Plugin
 
+> This is a maintained fork package (`@chikage0o0/opencode-dcp`) of the original project by [tarquinen](https://github.com/Opencode-DCP/opencode-dynamic-context-pruning).
+
 [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/dansmolsky)
-[![npm version](https://img.shields.io/npm/v/@tarquinen/opencode-dcp.svg)](https://www.npmjs.com/package/@tarquinen/opencode-dcp)
+[![npm version](https://img.shields.io/npm/v/@chikage0o0/opencode-dcp.svg)](https://www.npmjs.com/package/@chikage0o0/opencode-dcp)
 
 Automatically reduces token usage in OpenCode by managing conversation context.
 
@@ -12,7 +14,7 @@ Automatically reduces token usage in OpenCode by managing conversation context.
 Install from the CLI:
 
 ```bash
-opencode plugin @tarquinen/opencode-dcp@latest --global
+opencode plugin @chikage0o0/opencode-dcp@latest --global
 ```
 
 This installs the package and adds it to your global OpenCode config.
@@ -72,7 +74,7 @@ Each level overrides the previous, so project settings take priority over global
 
 ```jsonc
 {
-    "$schema": "https://raw.githubusercontent.com/Opencode-DCP/opencode-dynamic-context-pruning/master/dcp.schema.json",
+    "$schema": "https://raw.githubusercontent.com/Chikage0o0/opencode-dynamic-context-pruning/master/dcp.schema.json",
     // Enable or disable the plugin
     "enabled": true,
     // Automatically update npm-installed DCP when a newer npm latest is available.

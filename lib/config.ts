@@ -756,7 +756,7 @@ function createDefaultConfig(): void {
     }
 
     const configContent = `{
-  "$schema": "https://raw.githubusercontent.com/Opencode-DCP/opencode-dynamic-context-pruning/master/dcp.schema.json"
+  "$schema": "https://raw.githubusercontent.com/Chikage0o0/opencode-dynamic-context-pruning/master/dcp.schema.json"
 }
 `
     writeFileSync(GLOBAL_CONFIG_PATH_JSONC, configContent, "utf-8")

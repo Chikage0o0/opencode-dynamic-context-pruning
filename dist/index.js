@@ -1390,7 +1390,7 @@ function createDefaultConfig() {
     mkdirSync(GLOBAL_CONFIG_DIR, { recursive: true });
   }
   const configContent = `{
-  "$schema": "https://raw.githubusercontent.com/Opencode-DCP/opencode-dynamic-context-pruning/master/dcp.schema.json"
+  "$schema": "https://raw.githubusercontent.com/Chikage0o0/opencode-dynamic-context-pruning/master/dcp.schema.json"
 }
 `;
   writeFileSync(GLOBAL_CONFIG_PATH_JSONC, configContent, "utf-8");
@@ -7725,7 +7725,7 @@ function configureClientAuth(client) {
 import { readFile as readFile2, rm } from "fs/promises";
 import { basename, dirname as dirname3, join as join5 } from "path";
 import { fileURLToPath } from "url";
-var PACKAGE_NAME = "@tarquinen/opencode-dcp";
+var PACKAGE_NAME = "@chikage0o0/opencode-dcp";
 function startAutoUpdate(ctx, enabled) {
   if (!enabled) return;
   const controller = new AbortController();
