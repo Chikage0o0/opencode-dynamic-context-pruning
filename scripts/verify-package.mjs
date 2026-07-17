@@ -210,11 +210,29 @@ function validateRuntimeImportGraph() {
     }
 }
 
-function validatePackedFiles() {
-    const output = execFileSync("npm", ["pack", "--dry-run", "--json"], {
+function npmPackDryRun() {
+    const args = ["pack", "--dry-run", "--json"]
+    const options = {
         cwd: root,
         encoding: "utf8",
-    })
+    }
+
+    // npm is a .cmd shim on Windows, so execFileSync("npm") cannot launch it directly.
+    if (process.env.npm_execpath) {
+        return execFileSync(process.execPath, [process.env.npm_execpath, ...args], options)
+    }
+    if (process.platform === "win32") {
+        return execFileSync(
+            process.env.ComSpec ?? "cmd.exe",
+            ["/d", "/s", "/c", "npm pack --dry-run --json"],
+            options,
+        )
+    }
+    return execFileSync("npm", args, options)
+}
+
+function validatePackedFiles() {
+    const output = npmPackDryRun()
 
     const [result] = JSON.parse(output)
     if (!result || !Array.isArray(result.files)) {
